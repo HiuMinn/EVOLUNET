@@ -14,35 +14,54 @@ class EVOLUNET():
         """
         self.size = size
         self.num_layers = len(self.size)
+        self.scale_factor = 1
+        self.std_weights = 1
+        self.std_bias = 1
         if bias is None or weights is None:
             self.new_param()
         else:
             self.bias = bias
             self.weights = weights
-
+        self.fitness = 0
     def new_param(self):
         """
         initiate a new random parameters of the network
         :param self:
         :return:
         """
-        self.bias = [np.random.randn(y, 1) for y in self.size[1:]]
-        self.weights = [np.random.randn(y, x) for x, y in zip(self.size[:-1], self.size[1:])]
-        # self.bias = [np.zeros([y,1]) for y in self.size[1:]]
-        # self.weights = [np.zeros([y, x]) for x, y in zip(self.size[:-1], self.size[1:])]
+        self.bias = [self.scale_factor * np.random.randn(y, 1) for y in self.size[1:]]
+        self.weights = [self.scale_factor * np.random.randn(y, x) for x, y in zip(self.size[:-1], self.size[1:])]
         return None
 
-    def mutate_param (self,std_weights = 1, std_bias =1):
+    def mutate_param (self, reset_prob = 0.09):
         """
         regarding a neural network as a individual in the population, varie by norminal distribution
         mutate the bias and weights
         :return:
         """
-        for i in range(len(self.weights)):
-            self.weights[i] += np.random.normal(0,std_weights,size = self.weights[i].shape)
-        for i in range(len(self.bias)):
-            self.bias[i] += np.random.normal(0,std_bias,size = self.bias[i].shape)
 
+        mutated_weights = []
+        mutated_bias = []
+
+        for w,b in zip(self.weights, self.bias):
+            w_mutated = w + np.random.normal(0, self.std_weights, w.shape)
+            b_mutated = b + np.random.normal(0, self.std_bias, b.shape)
+
+            reset_mask_w = np.random.rand(*w.shape) < reset_prob
+            reset_mask_b = np.random.rand(*b.shape) < reset_prob
+
+            w_mutated[reset_mask_w] = np.random.randn(*w[reset_mask_w].shape)*self.scale_factor
+            b_mutated[reset_mask_b] = np.random.randn(*b[reset_mask_b].shape)*self.scale_factor
+
+            mutated_weights.append(w_mutated)
+            mutated_bias.append(b_mutated)
+        self.bias = mutated_bias
+        self.weights = mutated_weights
+
+    def get_params(self):
+        print(f"Weights:{self.weights}")
+        print(f"bias:{self.bias}")
+        return
 
     def feedforward(self, a):
         """
@@ -63,6 +82,7 @@ class EVOLUNET():
         :param z: vector or Numpy array
         :return:
         """
+        z = np.clip(z,-500,500)
         return 1 / (1 + np.exp(-z))
 
     def evaluate(self, training_data):
@@ -72,45 +92,53 @@ class EVOLUNET():
         :param test_data:
         :return:
         """
-        # fitness = 0
+        self.fitness = 0
         X_train,y_train = training_data
         y_pred = self.feedforward(X_train.T)
-        # print(np.array(y_pred))
-        # print(y_train)
-        cost = 1/len(X_train)*np.sum(y_train*np.log(y_pred)+(1-y_train)*np.log(1-y_pred))
-        return cost
+        y_pred = np.array(y_pred>=0.5,dtype= 'int')[0]
+        tp = fp =fn =0
+        for pred,truth in zip(y_pred,y_train):
+            tp += (pred ==1 ) and (truth ==1)
+            fp += (pred ==1) and (truth ==0)
+            fn += (pred ==0) and (truth ==1)
+        precision = tp / (tp + fp) if tp + fp > 0 else 0
+        recall = tp / (tp + fn) if tp + fn > 0 else 0
+        self.fitness =2*precision*recall/(precision+recall) if precision+recall > 0 else 0
+        return 2*precision*recall/(precision+recall) if precision+recall > 0 else 0
 
-    def plot_decision_boundary(self,train_X,train_y):
-        x_min, x_max = train_X[:, 0].min(), train_X[:, 0].max()
-        y_min, y_max = train_X[:, 1].min(), train_X[:, 1].max()
+    def plot_decision_boundary(self, training_data, resolution=0.01):
+        """
+        Plots the decision boundaries of a neural network classifier.
 
-        xx ,yy = np.meshgrid(np.linspace(x_min, x_max, 500)
-                             ,np.linspace(y_min, y_max, 500))
+        :param neural_network: The neural network object with `feedforward` method.
+        :param training_data: Tuple (X_train, y_train) with input data and labels.
+        :param resolution: The resolution of the grid for plotting.
+        """
+        X_train, y_train = training_data
 
-        grid = np.c_[xx.ravel(), yy.ravel()]
+        # Extract input feature ranges
+        x_min, x_max = X_train[:, 0].min() - 1, X_train[:, 0].max() + 1
+        y_min, y_max = X_train[:, 1].min() - 1, X_train[:, 1].max() + 1
 
-        prediction = []
-        for point in grid:
-            point = point.reshape(-1,1)
-            output = np.argmax(self.feedforward(point))
-            prediction.append(output)
-        print(prediction)
-        prediction = np.array(prediction).reshape(xx.shape)
-        plt.contourf(xx, yy, prediction, cmap = plt.cm.coolwarm, alpha = 0.6)
-        plt.scatter(train_X[:, 0], train_X[:, 1], c=train_y, cmap=plt.cm.coolwarm, edgecolor='k')
-        plt.xlabel('Feature 1')
-        plt.ylabel('Feature 2')
-        plt.title('Decision Boundary of the Neural Network')
+        # Create a grid of points
+        xx, yy = np.meshgrid(
+            np.arange(x_min, x_max, resolution),
+            np.arange(y_min, y_max, resolution)
+        )
+
+        # Flatten the grid and evaluate the neural network
+        grid_points = np.c_[xx.ravel(), yy.ravel()].T  # Shape (2, n_points)
+        predictions = self.feedforward(
+            grid_points)  # Neural network expects input of shape (n_features, n_samples)
+        predictions = np.array(predictions >= 0.5, dtype='int')  # Convert to binary predictions
+
+        # Reshape predictions to match the grid shape
+        Z = predictions.reshape(xx.shape)
+
+        # Plot decision boundaries
+        plt.contourf(xx, yy, Z, alpha=0.6, cmap='coolwarm')
+        plt.scatter(X_train[:, 0], X_train[:, 1], c=y_train, edgecolor='k', cmap='coolwarm')
+        plt.xlabel("Feature 1")
+        plt.ylabel("Feature 2")
+        plt.title("Decision Boundary")
         plt.show()
-
-
-if __name__ == '__main__':
-    network  = EVOLUNET(size=[2,3,2,1])
-    network.new_param()
-
-    print("old weights:",network.weights)
-    print("old bias",network.bias)
-
-    network.mutate_param()
-    print("new weights: ",network.weights)
-    print("new bias: ", network.bias)
