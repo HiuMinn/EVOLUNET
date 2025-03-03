@@ -1,11 +1,7 @@
 import numpy as np
-import pandas as pd
-from Bio.Pathway import Network
-from network import EVOLUNET
-from evolution import Evolution
+from models.evolution import Evolution
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
-from sklearn import datasets
 from sklearn.model_selection import train_test_split
 import csv
 
@@ -45,12 +41,12 @@ if __name__ == '__main__':
     test_data  =(X_test,y_test)
     plot_dataset(train_data)
 
-    network_sizes = [2,3,7,10,1]
+    network_sizes = [2,7,10,4,1]
     #Initialize the population
     new_population = Evolution(network_sizes,100,1000)
 
     #Run the evolution
-    best_network = new_population.generation_evolution(train_data,crossover=None)
+    best_network = new_population.generation_evolution(train_data,crossover=True)
 
     print(best_network.evaluate(test_data))
     new_population.plot_fitness()

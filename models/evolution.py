@@ -1,11 +1,11 @@
 ##################################### import libraries #########################################
-from network import EVOLUNET
+from models.network import EVOLUNET
 import matplotlib.pyplot as plt
 import numpy as np
 import random
 ########################################## genetic algorithm #########################
 class Evolution:
-    def __init__(self, sizes,nb_individuals=50, nb_generations=100):
+    def __init__(self, sizes,nb_individuals=100, nb_generations=500):
         self.nb_individuals = nb_individuals
         self.nb_generations = nb_generations
         self.neuro_size = sizes
@@ -49,7 +49,7 @@ class Evolution:
         ax.plot(range(len(self.fitness_history)), self.fitness_history, label='Average fitness')
         ax.plot(range(len(self.best_fitness_history)), self.best_fitness_history, label = "Best fitness",linestyle = ":")
         ax.set_title(f"fitness along the {self.nb_generations} generations in a population of {self.nb_individuals} individuals ")
-        ax.set(xlabel="Generation", ylabel=f'fitness(negative cost)')
+        ax.set(xlabel="Generation", ylabel=f'fitness')
         ax.legend()
         plt.show()
 
@@ -71,7 +71,7 @@ class Evolution:
             return parent, parent_fitness
 
     def crossover(self, parent1, parent2):
-        alpha = random.random()
+
         child1_weights = []
         child2_weights = []
         child1_bias = []
@@ -82,12 +82,13 @@ class Evolution:
             # Convert lists to numpy arrays for element-wise operations
             w1, w2 = np.array(w1), np.array(w2)
             b1, b2 = np.array(b1), np.array(b2)
-
+            alpha_w = np.random.uniform(size = w1.shape)
+            alpha_b = np.random.uniform(size = b1.shape)
             # Perform crossover on weights and biases
-            child1_weights.append(alpha * w1 + (1 - alpha) * w2)
-            child2_weights.append(alpha * w2 + (1 - alpha) * w1)
-            child1_bias.append(alpha * b1 + (1 - alpha) * b2)
-            child2_bias.append(alpha * b2 + (1 - alpha) * b1)
+            child1_weights.append(alpha_w * w1 + (1 - alpha_w) * w2)
+            child2_weights.append(alpha_w * w2 + (1 - alpha_w) * w1)
+            child1_bias.append(alpha_b * b1 + (1 - alpha_b) * b2)
+            child2_bias.append(alpha_b * b2 + (1 - alpha_b) * b1)
 
         # Return weights and biases as lists of numpy arrays
         return child1_weights, child2_weights, child1_bias, child2_bias
@@ -99,10 +100,6 @@ class Evolution:
             best_individual = self.population[i_best_individual]
             average_fitness = self.get_average_fitness()
 
-            # plt.plot(self.fitness)
-            # plt.show()
-            if generation % 100 ==0:
-                print("Generation {}".format(generation))
 
 
             #keep information for plot
@@ -111,8 +108,10 @@ class Evolution:
 
             #selection par tournament
             sub_population = self.selection_tournament(tournament_size = 3)
-            print(set(sub_population))
             next_population = []
+            if generation % 100 ==0:
+                print("Generation {}".format(generation))
+                # print(set(sub_population))
             if crossover:
                 for i in range(0, len(sub_population), 2):
                     parent1 = self.population[i]
@@ -137,7 +136,7 @@ class Evolution:
                     if child2_fitness > parent2.fitness:
                         next_population.append(child2)
                     else:
-                        next_population.append(child2)
+                        next_population.append(parent2)
             else:
                 for (parent, parent_fitness) in sub_population:
                     next_indivi,next_indivi_fitness= self.reproduce((parent,parent_fitness),training_data)
